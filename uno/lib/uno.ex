@@ -15,4 +15,11 @@ defmodule Uno do
   def hello do
     :world
   end
+
+  def test do
+    :ok
+  end
 end
+
+Uno.hello
+
