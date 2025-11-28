@@ -13,5 +13,9 @@ defmodule UnoTest do
   test "ok/0 returns :ok" do
     assert Uno.Model.Player.ok() == :ok
   end
+
+  test "access data set" do
+    IO.inspect(Uno.Model.Card.create_card_set)
+  end
 end
 
