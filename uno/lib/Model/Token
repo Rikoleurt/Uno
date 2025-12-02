@@ -1,0 +1,50 @@
+defmodule TokenRing do
+
+  def ring(succ) do
+    receive do
+      :init ->
+        IO.puts("#{inspect(self())} → Anneau complet ! Je démarre le tour 1")
+        send(self(), {:token, 1}) # Je me donne le premier token
+        ring(succ)
+
+      {:token, tour} ->
+        IO.puts("\n#{inspect(self())} → C'EST MON TOUR ! (tour #{tour})")
+        IO.puts("   (appuie sur Entrée pour passer le token au suivant)")
+
+        IO.gets("   → ") |> String.trim() # On attend que le joueur appuie sur Entrée
+
+        IO.puts("#{inspect(self())} passe le token → tour #{tour + 1}\n")
+        send(succ, {:token, tour + 1}) # On passe au suivant
+
+        ring(succ) # On attend le prochain tour
+
+      :stop -> # Pour arrêter proprement si besoin
+        IO.puts("#{inspect(self())} → Reçu :stop, je termine.")
+    end
+  end
+
+  def start(n) do
+    spawn(__MODULE__, :node, [n])
+  end
+
+  # Maître
+  def node(n) do
+    IO.puts("#{inspect(self())}: Process starting (maître)")
+    succ = spawn(__MODULE__, :node, [n-1, self()])
+    ring(succ)
+  end
+
+  # Dernier joueur
+  def node(1, ring0_pid) do
+    IO.puts("#{inspect(self())}: Process starting (dernier)")
+    send(ring0_pid, :init)
+    ring(ring0_pid)
+  end
+
+  # Les autres
+  def node(n, ring0_pid) do
+    IO.puts("#{inspect(self())}: Process starting")
+    succ = spawn(__MODULE__, :node, [n-1, ring0_pid])
+    ring(succ)
+  end
+end
