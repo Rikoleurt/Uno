@@ -17,6 +17,15 @@ defmodule Uno.Model.Turn do
     }
   end
 
+  def new(players, discard_pile) do
+    %__MODULE__{
+      players: players,
+      discard_pile: discard_pile,
+      token_index: 0,
+      direction: 1
+    }
+  end
+
   def distribute(players, cards, 0), do: {players, cards}
   def distribute(players, cards, n) when n > 0 do
     {players_after_round, remaining_cards} = deal_round(players, cards)
@@ -37,6 +46,9 @@ defmodule Uno.Model.Turn do
     %__MODULE__{turn | token_index: new_index}
   end
 
+  def set_direction(turn_manager, direction), do: struct!(turn_manager, direction)
+  def set_index(turn_manager, index), do: struct!(turn_manager, index)
+
   def handle_turn(player, card) do
     Player.use_card(player.deck, card, Turn.discard_pile)
     if Player.is_win(player.deck) do
@@ -45,10 +57,4 @@ defmodule Uno.Model.Turn do
       :continue
     end
   end
-
-  def traverse_player([h]), do: h
-  def traverse_player([_ | t]) do
-    traverse_player(t)
-  end
-
 end

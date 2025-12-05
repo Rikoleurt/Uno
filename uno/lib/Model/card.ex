@@ -4,21 +4,32 @@ defmodule Uno.Model.Card do
 
   defstruct number: nil, color: nil, effect: nil
   @colors [:red, :yellow, :green, :blue]
+  # @effect [:skip, :reverse, :draw_two]
 
-  def get_color(%__MODULE__{color: color}) do
-    color
-  end
-
-  def get_number(%__MODULE__{number: number}) do
-    number
-  end
-
-  def get_effect(%__MODULE__{effect: effect}) do
-    effect
-  end
+  alias Uno.Model.Card
 
   def new(number, color, effect) do
     %__MODULE__{number: number, color: color, effect: effect}
+  end
+
+  def same_color?(%Card{number: _number, color: color, effect: _effect}, _discard_pile = [h | _t]), do:
+     h.color == color
+
+  def same_number?(%Card{number: number, color: _color, effect: _effect}, _discard_pile = [h | _t]), do:
+    number == h.number
+
+  def handle_effect(%Card{effect: effect}, turn_manager) do
+    case effect do
+      :reverse ->
+        %{turn_manager | direction: -turn_manager.direction}
+      :draw_two ->
+        # add_2_next_player()
+        turn_manager
+      :skip ->
+        %{turn_manager | token_index: turn_manager.token_index + 2}
+      _ ->
+        turn_manager
+    end
   end
 
   defp create_number_cards do

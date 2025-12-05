@@ -1,23 +1,54 @@
 defmodule UnoTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: true
   doctest Uno
+  alias Uno.Model.{Card, Player, Turn}
 
   test "pick card" do
     IO.puts("------------- Pick Card -------------")
-    set = Uno.Model.Player.shuffle(Uno.Model.Card.create_card_set)
+    set = Player.shuffle(Card.create_card_set)
     deck = []
-    IO.inspect(Uno.Model.Player.pick_cards(deck, set, 2))
+    IO.inspect(Player.pick_cards(deck, set, 2))
   end
 
   test "use card" do
     IO.puts "------------- Use Card -------------"
-    # stack = Uno.Model.Player.shuffle(Uno.Model.Card.create_card_set)
-    discard_pile = [%Uno.Model.Card{number: 1, color: :yellow, effect: nil}]
-    deck = [
-      %Uno.Model.Card{number: 7, color: :green, effect: nil},
-      %Uno.Model.Card{number: 2, color: :yellow, effect: nil}
+
+    # 1) Création des joueurs (deck vide au début)
+    players = [
+      %Player{name: "Alice", deck: []},
+      %Player{name: "Bob", deck: []},
+      %Player{name: "Charlie", deck: []}
     ]
-    IO.inspect Uno.Model.Player.use_card(deck, Enum.at(deck, 1), discard_pile)
+
+    # 2) Création et mélange du paquet
+    card_set = Player.shuffle(Card.create_card_set())
+
+    # Remarque : première carte sur la pile = 1 jaune
+    discard_pile = [%Card{number: 1, color: :yellow, effect: nil}]
+
+    # 3) Distribution : chaque joueur reçoit 7 cartes
+    {dealt_players, remaining_cards} = Turn.distribute(players, card_set, 7)
+
+    # 4) Création du turn_manager avec les joueurs distribués
+    turn_manager = %Turn{
+      players: dealt_players,
+      discard_pile: discard_pile,
+      token_index: 0,
+      direction: 1
+    }
+
+    # 5) Premier joueur joue la première carte de son deck
+    first_player = hd(dealt_players)
+    deck = first_player.deck
+    card_to_play = hd(deck)
+
+    {:ok, new_deck, new_discard_pile, new_turn_manager} = Player.use_card(deck, card_to_play, discard_pile, turn_manager)
+
+    IO.inspect deck, label: "deck"
+    IO.inspect(new_deck, label: "new_deck")
+    IO.inspect(discard_pile, label: "discard_pile")
+    IO.inspect(new_discard_pile, label: "new_discard_pile")
+
   end
 
   test "next player moves token and wraps around" do
@@ -41,20 +72,5 @@ defmodule UnoTest do
     assert turn.token_index == 0
   end
 
-  test "Distribute cards" do
-    IO.puts "------------- Distribute Cards -------------"
-
-    card_set = Uno.Model.Player.shuffle(Uno.Model.Card.create_card_set)
-    IO.inspect length(card_set)
-    players = [
-      %Uno.Model.Player{name: "Alice", deck: []},
-      %Uno.Model.Player{name: "Bob", deck: []},
-      %Uno.Model.Player{name: "Charlie", deck: []},
-      %Uno.Model.Player{name: "Daniel", deck: []}
-    ]
-    {updated_players, remaining_cards} = Uno.Model.Turn.distribute(players, card_set, 7)
-    IO.inspect(updated_players, label: " ----- updated players -----")
-    IO.inspect(length(remaining_cards), label: " --- remaining cards -----")
-  end
 end
 
