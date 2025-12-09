@@ -2,7 +2,7 @@ defmodule Uno.Model.Player do
   @moduledoc false
   defstruct name: nil, deck: [Uno.Model.Card]
 
-  alias Uno.Model.Card
+  alias Uno.Model.{Card, Player, Turn}
 
   def new(name, deck) do
     %__MODULE__{
@@ -20,7 +20,7 @@ defmodule Uno.Model.Player do
     {new_deck, remaining_stack}
   end
 
-  def use_card(deck, %Card{effect: effect} = card, discard_pile, turn_manager) do
+  def use_card(%Player{deck: deck} = player, %Card{effect: effect} = card, discard_pile, %Turn{} = turn_manager) do
     playable? =
       case effect do
         :wild -> true
@@ -29,9 +29,9 @@ defmodule Uno.Model.Player do
           Card.same_color?(card, discard_pile) or Card.same_number?(card, discard_pile)
       end
 
-    if !playable? do
-      {:error, :invalid_move}
+    if not playable? do
       IO.puts("error")
+      {:error, :invalid_move}
     else
       {new_turn_manager, new_discard_pile} =
         case effect do
@@ -45,8 +45,8 @@ defmodule Uno.Model.Player do
             tm = Card.handle_effect(card, turn_manager)
             {tm, [card | discard_pile]}
         end
-      new_deck = deck -- [card]
-      {:ok, new_deck, new_discard_pile, new_turn_manager}
+      new_player = %Player{player | deck: deck -- [card]}
+      {:ok, new_player, new_discard_pile, new_turn_manager}
     end
   end
 

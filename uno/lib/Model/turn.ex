@@ -48,13 +48,4 @@ defmodule Uno.Model.Turn do
 
   def set_direction(turn_manager, direction), do: struct!(turn_manager, direction)
   def set_index(turn_manager, index), do: struct!(turn_manager, index)
-
-  def handle_turn(player, card) do
-    Player.use_card(player.deck, card, Turn.discard_pile)
-    if Player.is_win(player.deck) do
-      :stop
-    else
-      :continue
-    end
-  end
 end
