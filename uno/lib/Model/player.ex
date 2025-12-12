@@ -13,7 +13,7 @@ defmodule Uno.Model.Player do
 
   def shuffle(list), do: Enum.shuffle(list)
 
-  def pick_cards(deck, stack, n) when n > 0 do
+  def pick_cards(%Player{deck: deck}, stack, n) when n > 0 do
     picked = Enum.take(stack, n)
     remaining_stack = Enum.drop(stack, n)
     new_deck = deck ++ picked

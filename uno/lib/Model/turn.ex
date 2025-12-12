@@ -26,6 +26,14 @@ defmodule Uno.Model.Turn do
     }
   end
 
+  def current_player(%__MODULE__{players: players, token_index: index}) do
+    Enum.at(players, index)
+  end
+
+  def next_player(%__MODULE__{players: players, token_index: index, direction: dir}) do
+    Enum.at(players, index + dir)
+  end
+
   def distribute(players, cards, 0), do: {players, cards}
   def distribute(players, cards, n) when n > 0 do
     {players_after_round, remaining_cards} = deal_round(players, cards)

@@ -3,6 +3,12 @@ defmodule UnoTest do
   doctest Uno
   alias Uno.Model.{Card, Player, Turn}
 
+  setup do
+    {:ok, _} = start_supervised({Registry, keys: :unique, name: Uno.GameRegistry})
+    {:ok, _} = start_supervised({Phoenix.PubSub, name: Uno.PubSub})
+    :ok
+  end
+
   test "pick card" do
     IO.puts("------------- Pick Card -------------")
     set = Player.shuffle(Card.create_card_set)
@@ -74,6 +80,5 @@ defmodule UnoTest do
     turn = Uno.Model.Turn.next_turn(turn)
     assert turn.token_index == 0
   end
-
 end
 

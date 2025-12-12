@@ -4,9 +4,8 @@ defmodule Uno.Model.Card do
 
   defstruct number: nil, color: nil, effect: nil
   @colors [:red, :yellow, :green, :blue]
-  # @effect [:skip, :reverse, :draw_two]
 
-  alias Uno.Model.Card
+  alias Uno.Model.{Card, Player, Turn}
 
   def new(number, color, effect) do
     %__MODULE__{number: number, color: color, effect: effect}
@@ -23,8 +22,8 @@ defmodule Uno.Model.Card do
       :reverse ->
         %{turn_manager | direction: -turn_manager.direction}
       :draw_two ->
-        # add_2_next_player()
-        turn_manager
+        next_player = Turn.next_player(turn_manager)
+        #Player.pick_cards(next_player)
       :skip ->
         %{turn_manager | token_index: turn_manager.token_index + 2}
       _ ->
