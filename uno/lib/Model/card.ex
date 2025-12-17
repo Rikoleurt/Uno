@@ -17,19 +17,8 @@ defmodule Uno.Model.Card do
   def same_number?(%Card{number: number, color: _color, effect: _effect}, _discard_pile = [h | _t]), do:
     number == h.number
 
-  def handle_effect(%Card{effect: effect}, turn_manager) do
-    case effect do
-      :reverse ->
-        %{turn_manager | direction: -turn_manager.direction}
-      :draw_two ->
-        next_player = Turn.next_player(turn_manager)
-        #Player.pick_cards(next_player)
-      :skip ->
-        %{turn_manager | token_index: turn_manager.token_index + 2}
-      _ ->
-        turn_manager
-    end
-  end
+  # def handle_effect(%Card{effect: :reverse}, %Turn{} = turn), do: %{turn | direction: -turn.direction}
+  # def handle_effect(_card, %Turn{} = turn), do: turn
 
   defp create_number_cards do
     zeros = for color <- @colors do new(0, color, nil) end
@@ -58,8 +47,8 @@ defmodule Uno.Model.Card do
 
   def create_card_set do
     number_cards = create_number_cards()
-    action_cards = create_action_cards()
-    wild_cards   = create_wild_cards()
-    number_cards ++ action_cards ++ wild_cards
+    #action_cards = create_action_cards()
+    #wild_cards   = create_wild_cards()
+    number_cards # ++ action_cards ++ wild_cards
   end
 end
