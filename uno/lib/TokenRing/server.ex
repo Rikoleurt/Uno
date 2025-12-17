@@ -130,6 +130,7 @@ defmodule Uno.TokenRing.PlayerServer do
     top = hd(gs.discard_pile)
 
     IO.puts("Commands:")
+    IO.puts("  play <color> <number|skip|reverse>   (ex: play red 5 | play blue skip)")
     IO.puts("  play <color> <number>   (ex: play red 5)")
     IO.puts("  pick card")
     IO.puts("  uno!")
@@ -158,6 +159,7 @@ defmodule Uno.TokenRing.PlayerServer do
 
       _ ->
         IO.puts("Commands:")
+        IO.puts("  play <color> <number|skip|reverse>   (ex: play red 5 | play blue skip)")
         IO.puts("  play <color> <number>   (ex: play red 5)")
         IO.puts("  pick card")
         IO.puts("  uno!")
@@ -202,14 +204,30 @@ defmodule Uno.TokenRing.PlayerServer do
   # Parsing helpers
   # -----------------------
 
-  defp parse_play([color_s, number_s]) do
+  defp parse_play([color_s, value_s]) do
     with {:ok, color} <- parse_color(color_s),
-         {:ok, number} <- parse_number(number_s) do
-      {:ok, %{color: color, number: number}}
+         {:ok, value} <- parse_value(value_s) do
+      {:ok, %{color: color, value: value}}
     end
   end
 
   defp parse_play(_), do: {:error, :bad_format}
+
+  defp parse_value(s) do
+    s = s |> String.trim() |> String.downcase()
+    s = if String.starts_with?(s, ":"), do: String.slice(s, 1..-1), else: s
+
+    case s do
+      "skip" -> {:ok, :skip}
+      "reverse" -> {:ok, :reverse}
+      "draw_two" -> {:ok, :draw_two}
+      _ ->
+        case Integer.parse(s) do
+          {n, ""} when n >= 0 and n <= 9 -> {:ok, n}
+          _ -> {:error, :bad_value}
+        end
+    end
+  end
 
   defp parse_color(s) do
     case String.downcase(s) do
@@ -228,18 +246,21 @@ defmodule Uno.TokenRing.PlayerServer do
     end
   end
 
-  defp get_cards(%Player{} = player, %{color: color, number: number}) do
+  defp get_cards(%Player{} = player, %{color: color, value: value}) do
     card =
       Enum.find(player.deck, fn %Card{} = c ->
-        c.effect == nil and c.color == color and c.number == number
+        cond do
+          is_integer(value) ->
+            c.effect == nil and c.color == color and c.number == value
+          is_atom(value) ->
+            c.effect == value and c.color == color
+          true ->
+            false
+        end
       end)
 
     if card, do: {:ok, card}, else: {:error, :card_not_in_hand}
   end
-
-  # -----------------------
-  # Display helpers
-  # -----------------------
 
   defp show_hand(%Player{deck: deck}) do
     deck
@@ -253,7 +274,7 @@ defmodule Uno.TokenRing.PlayerServer do
        do: "#{Atom.to_string(color)} #{n}"
 
   defp format_card(%Card{effect: e, color: color}),
-       do: "#{Atom.to_string(color)} #{inspect(e)}"
+       do: "#{Atom.to_string(color)} #{Atom.to_string(e)}"
 
   defp server_ref(name), do: {:global, {:uno_player, name}}
 end

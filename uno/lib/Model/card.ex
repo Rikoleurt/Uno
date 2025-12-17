@@ -5,11 +5,13 @@ defmodule Uno.Model.Card do
   defstruct number: nil, color: nil, effect: nil
   @colors [:red, :yellow, :green, :blue]
 
-  alias Uno.Model.{Card}
+  alias Uno.Model.{Card, GameState}
 
   def new(number, color, effect) do
     %__MODULE__{number: number, color: color, effect: effect}
   end
+
+  def has_effect?(%Card{effect: effect}), do: effect != nil
 
   def same_color?(%Card{number: _number, color: color, effect: _effect}, _discard_pile = [h | _t]), do:
      h.color == color
@@ -17,8 +19,8 @@ defmodule Uno.Model.Card do
   def same_number?(%Card{number: number, color: _color, effect: _effect}, _discard_pile = [h | _t]), do:
     number == h.number
 
-  # def handle_effect(%Card{effect: :reverse}, %Turn{} = turn), do: %{turn | direction: -turn.direction}
-  # def handle_effect(_card, %Turn{} = turn), do: turn
+  def handle_effect(%Card{effect: :reverse}, %GameState{} = gs), do: %{gs | direction: -gs.direction}
+  def handle_effect(_card, %GameState{} = gs), do: gs
 
   defp create_number_cards do
     zeros = for color <- @colors do new(0, color, nil) end
@@ -31,7 +33,7 @@ defmodule Uno.Model.Card do
   # 24 action card :
   # - 2x Skip, Reverse, Draw Two
   defp create_action_cards do
-    for color <- @colors, effect <- [:skip, :reverse, :draw_two], _ <- 1..2 do
+    for color <- @colors, effect <- [:skip, :reverse], _ <- 1..2 do
       new(nil, color, effect)
     end
   end
@@ -47,8 +49,8 @@ defmodule Uno.Model.Card do
 
   def create_card_set do
     number_cards = create_number_cards()
-    #action_cards = create_action_cards()
+    action_cards = create_action_cards()
     #wild_cards   = create_wild_cards()
-    number_cards # ++ action_cards ++ wild_cards
+    number_cards ++ action_cards #++ wild_cards
   end
 end
