@@ -5,7 +5,7 @@ defmodule Uno.Model.Card do
   defstruct number: nil, color: nil, effect: nil
   @colors [:red, :yellow, :green, :blue]
 
-  alias Uno.Model.{Card, Player, Turn}
+  alias Uno.Model.{Card}
 
   def new(number, color, effect) do
     %__MODULE__{number: number, color: color, effect: effect}

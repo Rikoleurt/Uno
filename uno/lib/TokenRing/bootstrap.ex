@@ -1,5 +1,5 @@
 defmodule Uno.TokenRing.Bootstrap do
-  alias Uno.Model.{Turn, Player}
+  alias Uno.Model.{GameState, Player}
 
   # players_specs = [{"Alice", :"alice@127.0.0.1"}, {"Bob", :"bob@127.0.0.1"}, ...]
   def start_players(players_specs) do
@@ -8,9 +8,9 @@ defmodule Uno.TokenRing.Bootstrap do
     end)
   end
 
-  def start_game(%Turn{} = turn) do
-    first = Turn.current_player(turn).name
-    Uno.TokenRing.PlayerServer.inject_token(first, turn)
+  def start_game(gs = %GameState{}) do
+    first = GameState.current_player(gs).name
+    Uno.TokenRing.PlayerServer.inject_token(first, gs)
   end
 end
 

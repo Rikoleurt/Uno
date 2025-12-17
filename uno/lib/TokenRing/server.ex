@@ -3,19 +3,24 @@ defmodule Uno.TokenRing.PlayerServer do
 
   use GenServer
 
-  alias Uno.Model.{Turn, Player, Card}
+  alias Uno.TokenRing.Token
+  alias Uno.Model.{GameState, Player, Card}
 
   # -----------------------
   # Public API
   # -----------------------
 
-  def start_link(player_name) when is_binary(player_name) do
-    GenServer.start_link(__MODULE__, %{name: player_name}, name: server_ref(player_name))
+  def start_link(player_name, next_name) when is_binary(player_name) and is_binary(next_name) do
+    GenServer.start_link(__MODULE__,
+      %{name: player_name, next: next_name, last_turn: nil},
+      name: server_ref(player_name)
+    )
   end
 
-  def inject_token(player_name, %Turn{} = turn) do
-    GenServer.cast(server_ref(player_name), {:token, turn})
+  def inject_token(player_name, token) when is_map(token) do
+    GenServer.cast(server_ref(player_name), {:token, token})
   end
+
 
   # -----------------------
   # GenServer callbacks
@@ -34,39 +39,62 @@ defmodule Uno.TokenRing.PlayerServer do
   end
 
   @impl true
-  def handle_cast({:token, %Turn{} = turn}, state) do
-    current = Turn.current_player(turn)
+  def handle_cast({:token, %Token{} = token}, state) do
+    gs = token.gs
+    IO.puts("[#{state.name}@#{node()}] recv token phase=#{token.phase} round=#{token.round_id}")
 
-    IO.puts("[#{state.name}@#{node()}] recv token idx=#{turn.token_index} current=#{current.name}")
+    case token.phase do
+      :sync ->
+        state = %{state | last_turn: gs}
+        show_game_state(gs, state.name)
 
-    if current.name != state.name do
-      IO.puts("[#{state.name}@#{node()}] reroute -> #{current.name}")
-      GenServer.cast(server_ref(current.name), {:token, turn})
-      {:noreply, state}
-    else
-      result = run_local_turn(turn)
-
-      case result do
-        {:game_over, winner, %Turn{} = final_turn} ->
-          IO.puts("[#{state.name}@#{node()}] GAME OVER winner=#{winner}")
-          broadcast_game_over(winner, final_turn)
+        if state.name == token.origin do
+          token2 = Token.to_turn(token)
+          GenServer.cast(server_ref(token2.actor), {:token, token2})
           {:noreply, state}
+        else
+          forward_to_next(token, state)
+        end
 
-        %Turn{} = new_turn ->
-          next_name = Turn.current_player(new_turn).name
-          IO.puts("[#{state.name}@#{node()}] send -> #{next_name} idx=#{new_turn.token_index}")
-          GenServer.cast(server_ref(next_name), {:token, new_turn})
-          {:noreply, state}
-      end
+      :turn ->
+        if state.name != token.actor do
+          forward_to_next(token, state)
+        else
+          result = run_local_turn(gs)
+
+          case result do
+            {:game_over, winner, %GameState{} = final_gs} ->
+              broadcast_game_over(winner, final_gs)
+              {:noreply, %{state | last_turn: final_gs}}
+
+            %GameState{} = new_gs ->
+              next_actor = GameState.current_player(new_gs).name
+              token2 = Token.next_round_sync(token, new_gs, state.name, next_actor)
+              forward_to_next(token2, state)
+          end
+        end
     end
   end
 
+  @impl true
+  def handle_cast({:token, other}, state) do
+    IO.puts("[#{state.name}@#{node()}] recv unknown token: #{inspect(other)}")
+    {:noreply, state}
+  end
 
-  defp broadcast_game_over(winner, %Turn{} = turn) do
-    Enum.each(turn.players, fn p ->
+
+  defp broadcast_game_over(winner, %GameState{} = gs) do
+    Enum.each(gs.players, fn p ->
       GenServer.cast(server_ref(p.name), {:game_over, winner})
     end)
   end
+
+  defp forward_to_next(token, state) do
+    IO.puts("[#{state.name}@#{node()}] forward -> #{state.next}")
+    GenServer.cast(server_ref(state.next), {:token, token})
+    {:noreply, state}
+  end
+
 
 
 
@@ -74,18 +102,39 @@ defmodule Uno.TokenRing.PlayerServer do
   # CLI
   # -----------------------
 
-  defp run_local_turn(%Turn{} = turn), do: loop_cmd(turn)
+  defp run_local_turn(gs = %GameState{}), do: loop_cmd(gs)
 
-  defp loop_cmd(%Turn{} = turn) do
-    player = Turn.current_player(turn)
-    top = hd(turn.discard_pile)
+  defp show_game_state(gs = %GameState{}, my_name) do
+    top_card = hd(gs.discard_pile)
+    current_player = GameState.current_player(gs).name
+
+    IO.puts("\n--- STATE UPDATE for #{my_name} ---")
+    IO.puts("Top discard: #{format_card(top_card)}")
+    IO.puts("Current player : #{current_player}")
+
+    Enum.each(gs.players, fn p ->
+      hand_size = length(p.deck)
+      if p.name == my_name do
+        IO.puts("  #{p.name}: #{hand_size} cards")
+      else
+        IO.puts("  #{p.name}: #{hand_size} cards")
+      end
+    end)
+
+    IO.puts("-----------------------------\n")
+  end
+
+
+  defp loop_cmd(gs = %GameState{}) do
+    player = GameState.current_player(gs)
+    top = hd(gs.discard_pile)
 
     IO.puts("Commands:")
     IO.puts("  play <color> <number>   (ex: play red 5)")
     IO.puts("  pick card")
     IO.puts("  uno!")
 
-    IO.puts("\n=== Tour de #{player.name} ===")
+    IO.puts("\n=== #{player.name}'s turn ===")
     IO.puts("Top discard: #{format_card(top)}")
     IO.puts("Ta main:")
     show_hand(player)
@@ -97,54 +146,54 @@ defmodule Uno.TokenRing.PlayerServer do
     case String.downcase(cmd) do
       "uno!" ->
         p = Player.call_uno(player)
-        turn |> Turn.update_current_player(p) |> loop_cmd()
+        gs |> GameState.update_current_player(p) |> loop_cmd()
 
       "pick card" ->
-        {picked, turn1} = Turn.draw_cards(turn, 1)
+        {picked, new_gs} = GameState.draw_cards(gs, 1)
         p2 = %Player{player | deck: player.deck ++ picked, uno_called: false}
-        turn1 |> Turn.update_current_player(p2) |> Turn.next_turn()
+        new_gs |> GameState.update_current_player(p2) |> GameState.next_turn()
 
       <<"play ", rest::binary>> ->
-        handle_play(String.trim(rest), turn, player)
+        handle_play(String.trim(rest), gs, player)
 
       _ ->
         IO.puts("Commands:")
         IO.puts("  play <color> <number>   (ex: play red 5)")
         IO.puts("  pick card")
         IO.puts("  uno!")
-        loop_cmd(turn)
+        loop_cmd(gs)
     end
   end
 
-  defp handle_play(rest, %Turn{} = turn, %Player{name: name} = player) do
+  defp handle_play(rest, gs = %GameState{}, %Player{name: name} = player) do
     parts = String.split(rest, ~r/\s+/, trim: true)
 
     with {:ok, want} <- parse_play(parts),
          {:ok, card} <- get_cards(player, want),
-         {:ok, new_player, _new_discard, new_turn0} <-
-           Player.use_card(player, card, turn.discard_pile, turn) do
+         {:ok, new_player, _new_discard, new_gs} <-
+           Player.use_card(player, card, gs.discard_pile, gs) do
 
-      new_turn =
-        if new_turn0.token_index == turn.token_index do
-          Turn.next_turn(new_turn0)
+      new_gs2 =
+        if new_gs.token_index == gs.token_index do
+          GameState.next_turn(new_gs)
         else
-          new_turn0
+          new_gs
         end
 
       if Player.is_win(new_player) do
         IO.puts("\n#{name} has won!\n")
-        {:game_over, name, new_turn}
+        {:game_over, name, new_gs2}
       else
-        new_turn
+        new_gs2
       end
     else
       {:error, reason} ->
         IO.puts("Invalid card: #{inspect(reason)}")
-        loop_cmd(turn)
+        loop_cmd(gs)
 
       _ ->
         IO.puts("Invalid card.")
-        loop_cmd(turn)
+        loop_cmd(gs)
     end
   end
 
