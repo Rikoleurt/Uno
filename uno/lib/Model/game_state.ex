@@ -6,7 +6,7 @@ defmodule Uno.Model.GameState do
 
   def new(players) do
     cards = Card.create_card_set() |> Enum.shuffle()
-    {players, cards} = distribute(players, cards, 7)
+    {players, cards} = distribute(players, cards, 3)
     [first | rest] = cards
 
     %__MODULE__{

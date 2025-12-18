@@ -22,10 +22,14 @@ defmodule Uno.Model.Player do
   # ----------------------
   defp update_gs(%Player{} = player, %Card{effect: :skip} = card, discard_pile, %GameState{} = gs) do
     new_discard = [card | discard_pile]
-    new_player = %Player{player | deck: List.delete(player.deck, card), uno_called: false}
+
+    remaining_deck = List.delete(player.deck, card)
+    {final_deck, gs_after_penalty} = apply_uno_penalty(gs, player, remaining_deck)
+
+    new_player = %Player{player | deck: final_deck, uno_called: false}
 
     new_gs =
-      gs
+      gs_after_penalty
       |> GameState.update_current_player(new_player)
       |> Map.put(:discard_pile, new_discard)
       |> GameState.next_turn()
@@ -36,14 +40,29 @@ defmodule Uno.Model.Player do
 
   defp update_gs(%Player{} = player, %Card{} = card, discard_pile, %GameState{} = gs) do
     new_discard = [card | discard_pile]
-    new_player = %Player{player | deck: List.delete(player.deck, card), uno_called: false}
+
+    remaining_deck = List.delete(player.deck, card)
+    {final_deck, gs_after_penalty} = apply_uno_penalty(gs, player, remaining_deck)
+
+    new_player = %Player{player | deck: final_deck, uno_called: false}
+
     new_gs =
-      gs
+      gs_after_penalty
       |> GameState.update_current_player(new_player)
       |> Map.put(:discard_pile, new_discard)
       |> GameState.next_turn()
 
     {:ok, new_player, new_discard, new_gs}
+  end
+
+
+  defp apply_uno_penalty(%GameState{} = gs, %Player{} = player, remaining_deck) do
+    if length(remaining_deck) == 1 and player.uno_called == false do
+      {penalty_cards, gs2} = GameState.draw_cards(gs, 2)
+      {remaining_deck ++ penalty_cards, gs2}
+    else
+      {remaining_deck, gs}
+    end
   end
 
   defp apply_effect(%Card{effect: :draw_two}, %GameState{} = gs), do: %GameState{gs | must_draw: gs.must_draw + 2}
