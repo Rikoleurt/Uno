@@ -4,6 +4,10 @@ defmodule Uno.Model.Player do
 
   alias Uno.Model.{Card, Player, GameState}
 
+  # ----------------------
+  # Player actions
+  # ----------------------
+
   def call_uno(%Player{} = p), do: %Player{p | uno_called: true}
 
   def use_card(%Player{} = player, %Card{} = card, discard_pile, %GameState{} = gs) do
@@ -14,7 +18,6 @@ defmodule Uno.Model.Player do
       update_gs(player, card, discard_pile, gs2)
     end
   end
-
 
 
   # ----------------------

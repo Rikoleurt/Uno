@@ -7,7 +7,7 @@ defmodule Uno.TokenRing.PlayerServer do
   alias Uno.Model.{GameState, Player, Card}
 
   # -----------------------
-  # Public API
+  # API
   # -----------------------
 
   def start_link(player_name, next_name) when is_binary(player_name) and is_binary(next_name) do
@@ -41,7 +41,7 @@ defmodule Uno.TokenRing.PlayerServer do
   @impl true
   def handle_cast({:token, %Token{} = token}, state) do
     gs = token.gs
-    IO.puts("[#{state.name}@#{node()}] recv token phase=#{token.phase} round=#{token.round_id}")
+    IO.puts("[#{state.name}@#{node()}] recieve token.phase : #{token.phase} round_number : #{token.round_id}")
 
     case token.phase do
       :sync ->
@@ -69,7 +69,7 @@ defmodule Uno.TokenRing.PlayerServer do
 
             %GameState{} = new_gs ->
               next_actor = GameState.current_player(new_gs).name
-              token2 = Token.next_round_sync(token, new_gs, state.name, next_actor)
+              token2 = Token.sync_next_round(token, new_gs, state.name, next_actor)
               forward_to_next(token2, state)
           end
         end
@@ -252,7 +252,7 @@ defmodule Uno.TokenRing.PlayerServer do
 
 
   # -----------------------
-  # Parsing helpers
+  # Parsing helpers - Card Analysis
   # -----------------------
 
   defp parse_play([value_s]) do
@@ -264,11 +264,10 @@ defmodule Uno.TokenRing.PlayerServer do
   defp parse_play([value_s, color_s]) do
     with {:ok, value} <- parse_value(value_s),
          true <- value in [:wild, :wild_draw_four],
-         {:ok, chosen} <- parse_color(color_s) do
+         {:ok, chosen} <- parse_chosen_color(color_s) do
       {:ok, %{color: :wild, value: value, chosen_color: chosen}}
     else
       _ ->
-        # fallback "normal": play <color> <value>
         with {:ok, color} <- parse_color(value_s),
              {:ok, value} <- parse_value(color_s) do
           {:ok, %{color: color, value: value, chosen_color: nil}}
@@ -294,6 +293,16 @@ defmodule Uno.TokenRing.PlayerServer do
           {n, ""} when n >= 0 and n <= 9 -> {:ok, n}
           _ -> {:error, :bad_value}
         end
+    end
+  end
+
+  defp parse_chosen_color(s) do
+    case String.downcase(s) do
+      "red" -> {:ok, :red}
+      "blue" -> {:ok, :blue}
+      "yellow" -> {:ok, :yellow}
+      "green" -> {:ok, :green}
+      _ -> {:error, :bad_color}
     end
   end
 
