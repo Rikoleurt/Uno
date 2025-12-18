@@ -1,6 +1,6 @@
 defmodule Uno.Model.GameState do
   @moduledoc false
-  defstruct players: [], draw_pile: [], discard_pile: [], token_index: 0, direction: 1
+  defstruct players: [], draw_pile: [], discard_pile: [], token_index: 0, direction: 1, must_draw: 0
 
   alias Uno.Model.{Card, Player}
 

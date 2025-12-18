@@ -95,14 +95,11 @@ defmodule Uno.TokenRing.PlayerServer do
     {:noreply, state}
   end
 
-
-
-
   # -----------------------
   # CLI
   # -----------------------
 
-  defp run_local_turn(gs = %GameState{}), do: loop_cmd(gs)
+  defp run_local_turn(gs = %GameState{}), do: cmd(gs)
 
   defp show_game_state(gs = %GameState{}, my_name) do
     top_card = hd(gs.discard_pile)
@@ -125,77 +122,131 @@ defmodule Uno.TokenRing.PlayerServer do
   end
 
 
-  defp loop_cmd(gs = %GameState{}) do
+  defp cmd(gs = %GameState{}) do
     player = GameState.current_player(gs)
     top = hd(gs.discard_pile)
 
-    IO.puts("Commands:")
-    IO.puts("  play <color> <number|skip|reverse>   (ex: play red 5 | play blue skip)")
-    IO.puts("  play <color> <number>   (ex: play red 5)")
-    IO.puts("  pick card")
-    IO.puts("  uno!")
+    if gs.must_draw > 0 do
+      n = gs.must_draw
+      IO.puts("\n=== #{player.name} must draw #{n} cards and loses the turn ===\n")
 
-    IO.puts("\n=== #{player.name}'s turn ===")
-    IO.puts("Top discard: #{format_card(top)}")
-    IO.puts("Ta main:")
-    show_hand(player)
+      {picked, gs2} = GameState.draw_cards(gs, n)
+      p2 = %Player{player | deck: player.deck ++ picked, uno_called: false}
 
-    cmd = IO.gets("> ")
-      |> to_string()
-      |> String.trim()
+      %GameState{gs2 | must_draw: 0}
+      |> GameState.update_current_player(p2)
+      |> GameState.next_turn()
+    else
 
-    case String.downcase(cmd) do
-      "uno!" ->
-        p = Player.call_uno(player)
-        gs |> GameState.update_current_player(p) |> loop_cmd()
+      IO.puts("Commands:")
+      IO.puts("  play <color> <number|skip|reverse>   (ex: play red 5 | play blue skip)")
+      IO.puts("  play <color> <number>   (ex: play red 5)")
+      IO.puts("  pick card")
+      IO.puts("  uno!")
 
-      "pick card" ->
-        {picked, new_gs} = GameState.draw_cards(gs, 1)
-        p2 = %Player{player | deck: player.deck ++ picked, uno_called: false}
-        new_gs |> GameState.update_current_player(p2) |> GameState.next_turn()
+      IO.puts("\n=== #{player.name}'s turn ===")
+      IO.puts("Top discard: #{format_card(top)}")
+      IO.puts("Ta main:")
+      show_hand(player)
 
-      <<"play ", rest::binary>> ->
-        handle_play(String.trim(rest), gs, player)
+      cmd = IO.gets("> ")
+        |> to_string()
+        |> String.trim()
 
-      _ ->
-        IO.puts("Commands:")
-        IO.puts("  play <color> <number|skip|reverse>   (ex: play red 5 | play blue skip)")
-        IO.puts("  play <color> <number>   (ex: play red 5)")
-        IO.puts("  pick card")
-        IO.puts("  uno!")
-        loop_cmd(gs)
+      case String.downcase(cmd) do
+        "uno!" ->
+          p = Player.call_uno(player)
+          gs |> GameState.update_current_player(p) |> cmd()
+
+        "pick card" ->
+          {picked, new_gs} = GameState.draw_cards(gs, 1)
+          p2 = %Player{player | deck: player.deck ++ picked, uno_called: false}
+          new_gs |> GameState.update_current_player(p2) |> GameState.next_turn()
+
+        <<"play ", rest::binary>> ->
+          handle_play(String.trim(rest), gs, player)
+
+        _ ->
+          IO.puts("Commands:")
+          IO.puts("  play <color> <number|skip|reverse|draw_two|wild_draw_four>   (ex: play red 5 | play blue skip)")
+          IO.puts("  play <color> <number>   (ex: play red 5)")
+          IO.puts("  pick card")
+          IO.puts("  uno!")
+          cmd(gs)
+      end
     end
+  end
+
+  defp prompt_wild_color() do
+    IO.puts("Choose a color for wild (red/blue/yellow/green):")
+
+    IO.gets("> ")
+    |> to_string()
+    |> String.trim()
+    |> String.downcase()
+    |> case do
+         "red" -> :red
+         "blue" -> :blue
+         "yellow" -> :yellow
+         "green" -> :green
+         _ ->
+           IO.puts("Invalid color. Try again.")
+           prompt_wild_color()
+       end
   end
 
   defp handle_play(rest, gs = %GameState{}, %Player{name: name} = player) do
     parts = String.split(rest, ~r/\s+/, trim: true)
 
     with {:ok, want} <- parse_play(parts),
-         {:ok, card} <- get_cards(player, want),
-         {:ok, new_player, _new_discard, new_gs} <-
-           Player.use_card(player, card, gs.discard_pile, gs) do
-
-      new_gs2 =
-        if new_gs.token_index == gs.token_index do
-          GameState.next_turn(new_gs)
+         {:ok, card} <- get_cards(player, want) do
+      # If wild / wild_draw_four: choose color (either provided or prompted)
+      chosen_color =
+        if card.effect in [:wild, :wild_draw_four] do
+          case Map.get(want, :chosen_color) do
+            nil -> prompt_wild_color()
+            c -> c
+          end
         else
-          new_gs
+          nil
         end
 
-      if Player.is_win(new_player) do
-        IO.puts("\n#{name} has won!\n")
-        {:game_over, name, new_gs2}
-      else
-        new_gs2
+      case Player.use_card(player, card, gs.discard_pile, gs) do
+        {:ok, new_player, _new_discard, new_gs} ->
+          new_gs =
+            if card.effect in [:wild, :wild_draw_four] and is_atom(chosen_color) do
+              colored = %Card{card | color: chosen_color}
+              %GameState{new_gs | discard_pile: [colored | tl(new_gs.discard_pile)]}
+            else
+              new_gs
+            end
+
+          new_gs2 =
+            if new_gs.token_index == gs.token_index do
+              GameState.next_turn(new_gs)
+            else
+              new_gs
+            end
+
+          if Player.is_win(new_player) do
+            IO.puts("\n#{name} has won!\n")
+            {:game_over, name, new_gs2}
+          else
+            new_gs2
+          end
+
+        {:error, reason} ->
+          IO.puts("Invalid card: #{inspect(reason)}")
+          cmd(gs)
       end
     else
       {:error, reason} ->
         IO.puts("Invalid card: #{inspect(reason)}")
-        loop_cmd(gs)
+        cmd(gs)
 
       _ ->
         IO.puts("Invalid card.")
-        loop_cmd(gs)
+        cmd(gs)
     end
   end
 
@@ -204,10 +255,24 @@ defmodule Uno.TokenRing.PlayerServer do
   # Parsing helpers
   # -----------------------
 
-  defp parse_play([color_s, value_s]) do
-    with {:ok, color} <- parse_color(color_s),
-         {:ok, value} <- parse_value(value_s) do
-      {:ok, %{color: color, value: value}}
+  defp parse_play([value_s]) do
+    with {:ok, value} <- parse_value(value_s) do
+      {:ok, %{color: :wild, value: value, chosen_color: nil}}
+    end
+  end
+
+  defp parse_play([value_s, color_s]) do
+    with {:ok, value} <- parse_value(value_s),
+         true <- value in [:wild, :wild_draw_four],
+         {:ok, chosen} <- parse_color(color_s) do
+      {:ok, %{color: :wild, value: value, chosen_color: chosen}}
+    else
+      _ ->
+        # fallback "normal": play <color> <value>
+        with {:ok, color} <- parse_color(value_s),
+             {:ok, value} <- parse_value(color_s) do
+          {:ok, %{color: color, value: value, chosen_color: nil}}
+        end
     end
   end
 
@@ -221,6 +286,9 @@ defmodule Uno.TokenRing.PlayerServer do
       "skip" -> {:ok, :skip}
       "reverse" -> {:ok, :reverse}
       "draw_two" -> {:ok, :draw_two}
+      "wild" -> {:ok, :wild}
+      "wild_draw_four" -> {:ok, :wild_draw_four}
+      "draw_four" -> {:ok, :wild_draw_four}
       _ ->
         case Integer.parse(s) do
           {n, ""} when n >= 0 and n <= 9 -> {:ok, n}
@@ -235,6 +303,7 @@ defmodule Uno.TokenRing.PlayerServer do
       "blue" -> {:ok, :blue}
       "yellow" -> {:ok, :yellow}
       "green" -> {:ok, :green}
+      "wild" -> {:ok, :wild}
       _ -> {:error, :bad_color}
     end
   end
@@ -253,7 +322,11 @@ defmodule Uno.TokenRing.PlayerServer do
           is_integer(value) ->
             c.effect == nil and c.color == color and c.number == value
           is_atom(value) ->
-            c.effect == value and c.color == color
+            if value in [:wild, :wild_draw_four] do
+              c.effect == value
+            else
+              c.effect == value and c.color == color
+            end
           true ->
             false
         end

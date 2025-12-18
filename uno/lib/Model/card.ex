@@ -33,7 +33,7 @@ defmodule Uno.Model.Card do
   # 24 action card :
   # - 2x Skip, Reverse, Draw Two
   defp create_action_cards do
-    for color <- @colors, effect <- [:skip, :reverse], _ <- 1..2 do
+    for color <- @colors, effect <- [:skip, :reverse, :draw_two], _ <- 1..2 do
       new(nil, color, effect)
     end
   end
@@ -50,7 +50,7 @@ defmodule Uno.Model.Card do
   def create_card_set do
     number_cards = create_number_cards()
     action_cards = create_action_cards()
-    #wild_cards   = create_wild_cards()
-    number_cards ++ action_cards #++ wild_cards
+    wild_cards   = create_wild_cards()
+    number_cards ++ action_cards ++ wild_cards
   end
 end

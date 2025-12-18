@@ -15,6 +15,11 @@ defmodule Uno.Model.Player do
     end
   end
 
+
+
+  # ----------------------
+  # HELPERS
+  # ----------------------
   defp update_gs(%Player{} = player, %Card{effect: :skip} = card, discard_pile, %GameState{} = gs) do
     new_discard = [card | discard_pile]
     new_player = %Player{player | deck: List.delete(player.deck, card), uno_called: false}
@@ -41,6 +46,8 @@ defmodule Uno.Model.Player do
     {:ok, new_player, new_discard, new_gs}
   end
 
+  defp apply_effect(%Card{effect: :draw_two}, %GameState{} = gs), do: %GameState{gs | must_draw: gs.must_draw + 2}
+  defp apply_effect(%Card{effect: :wild_draw_four}, %GameState{} = gs), do: %GameState{gs | must_draw: gs.must_draw + 4}
   defp apply_effect(%Card{effect: :reverse} = card, %GameState{} = gs), do: Card.handle_effect(card, gs)
   defp apply_effect(_card, %GameState{} = gs), do: gs
 
